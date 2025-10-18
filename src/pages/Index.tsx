@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ interface AudioFile {
   name: string;
   duration: number;
   processed: boolean;
+  url?: string;
 }
 
 const Index = () => {
@@ -21,6 +22,11 @@ const Index = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [currentTrack, setCurrentTrack] = useState<AudioFile | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [volume, setVolume] = useState(0.7);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -60,6 +66,7 @@ const Index = () => {
             name: file.name,
             duration: Math.floor(Math.random() * 300) + 60,
             processed: true,
+            url: URL.createObjectURL(file),
           }));
           setAudioFiles(prev => [...newFiles, ...prev]);
           return 100;
@@ -68,6 +75,63 @@ const Index = () => {
       });
     }, 100);
   };
+
+  const playTrack = (file: AudioFile) => {
+    if (currentTrack?.id === file.id && isPlaying) {
+      audioRef.current?.pause();
+      setIsPlaying(false);
+    } else {
+      setCurrentTrack(file);
+      setIsPlaying(true);
+    }
+  };
+
+  const togglePlayPause = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+  };
+
+  const handleSeek = (value: number[]) => {
+    if (audioRef.current && currentTrack) {
+      audioRef.current.currentTime = value[0];
+      setCurrentTime(value[0]);
+    }
+  };
+
+  const handleVolumeChange = (value: number[]) => {
+    const newVolume = value[0];
+    setVolume(newVolume);
+    if (audioRef.current) {
+      audioRef.current.volume = newVolume;
+    }
+  };
+
+  useEffect(() => {
+    if (currentTrack && audioRef.current && currentTrack.url) {
+      audioRef.current.src = currentTrack.url;
+      if (isPlaying) {
+        audioRef.current.play();
+      }
+    }
+  }, [currentTrack]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
+    }
+  }, []);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -256,8 +320,16 @@ const Index = () => {
                             {formatDuration(file.duration)}
                           </p>
                         </div>
-                        <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Icon name="Play" size={16} />
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => playTrack(file)}
+                        >
+                          <Icon 
+                            name={currentTrack?.id === file.id && isPlaying ? "Pause" : "Play"} 
+                            size={16} 
+                          />
                         </Button>
                       </div>
                     </div>
@@ -295,6 +367,73 @@ const Index = () => {
             </Card>
           </div>
         </div>
+
+        {currentTrack && (
+          <Card className="fixed bottom-0 left-0 right-0 glass-effect border-t border-border m-6 animate-slide-up">
+            <div className="p-4">
+              <audio 
+                ref={audioRef} 
+                onTimeUpdate={handleTimeUpdate}
+                onEnded={() => setIsPlaying(false)}
+              />
+              
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="p-3 rounded-lg bg-primary/10">
+                    <Icon name="Music" className="text-primary" size={24} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold truncate">{currentTrack.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDuration(Math.floor(currentTime))} / {formatDuration(currentTrack.duration)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <Button variant="ghost" size="icon">
+                    <Icon name="SkipBack" size={20} />
+                  </Button>
+                  <Button 
+                    size="icon" 
+                    className="h-12 w-12"
+                    onClick={togglePlayPause}
+                  >
+                    <Icon name={isPlaying ? "Pause" : "Play"} size={24} />
+                  </Button>
+                  <Button variant="ghost" size="icon">
+                    <Icon name="SkipForward" size={20} />
+                  </Button>
+                </div>
+
+                <div className="flex items-center gap-3 w-32">
+                  <Icon name="Volume2" size={18} className="text-muted-foreground" />
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={volume}
+                    onChange={(e) => handleVolumeChange([parseFloat(e.target.value)])}
+                    className="w-full accent-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <input
+                  type="range"
+                  min="0"
+                  max={currentTrack.duration}
+                  step="0.1"
+                  value={currentTime}
+                  onChange={(e) => handleSeek([parseFloat(e.target.value)])}
+                  className="w-full accent-primary"
+                />
+              </div>
+            </div>
+          </Card>
+        )}
       </div>
     </div>
   );
